@@ -64,6 +64,8 @@ using its bundled `psql`. It verifies PG17 and exact decimals, an explicit-LSN
 branch after ingestion, parent/child isolation, graceful compute restart, and
 acknowledged data after abrupt compute termination. Compute directories are
 freshly reconstructed by `compute_ctl` on restart.
+Graceful fixture shutdown uses `pg_ctl -w stop` before terminating the controller,
+so a replacement cannot reuse PGDATA while the old postmaster is still stopping.
 The fixture disables core dumps with a zero hard limit before starting any
 services, exercising the ordinary-user startup correction in EC-0004.
 
@@ -84,6 +86,11 @@ The [standalone workflow](../../.github/workflows/native-engine.yml) builds and
 tests both targets without private Neon actions or secrets. It retains logs and
 developer artifacts. Successful Linux results do not qualify macOS, and passing
 this smoke does not complete the platform's release checklist.
+Service logs are copied beside a failed report and included in CI artifacts.
+For packaging/runtime diagnosis, manually dispatch the workflow with an
+`artifact_run` ID to replay existing checksum-verified archives without compiling
+the engine again. The original bundle source identity remains in the report;
+the replay workflow revision identifies the qualification harness separately.
 
 Linux CI also runs `clean-linux.sh` as root on its disposable runner. It verifies
 the archive checksum and uses [debootstrap](https://manpages.ubuntu.com/manpages/noble/man8/debootstrap.8.html)

@@ -1,6 +1,11 @@
 name: native-engine
 on:
   workflow_dispatch:
+    inputs:
+      artifact_run:
+        description: 'Optional prior build run ID: replay its archives without rebuilding'
+        type: string
+        required: false
   pull_request:
     paths:
       - 'scripts/native/**'
@@ -16,9 +21,10 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: native-engine-${{ github.head_ref || github.ref_name }}
+  group: native-engine-${{ inputs.artifact_run && 'replay' || 'build' }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -43,29 +49,66 @@ jobs:
         with:
           python-version: '3.12'
       - name: Linux build tools
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !inputs.artifact_run
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libtool libreadline-dev zlib1g-dev flex bison libseccomp-dev libssl-dev clang pkg-config cmake protobuf-compiler libprotobuf-dev libcurl4-openssl-dev libicu-dev patchelf
       - name: macOS build tools
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && !inputs.artifact_run
         run: brew install flex bison openssl@3 protobuf icu4c pkg-config
       - name: Install pinned Rust toolchain
+        if: '!inputs.artifact_run'
         run: rustup toolchain install 1.88.0 --profile minimal
       - uses: Swatinem/rust-cache@v2
+        if: '!inputs.artifact_run'
+        with:
+          cache-on-failure: true
       - name: Build PG17 and engine; run PostgreSQL regression suite
+        if: '!inputs.artifact_run'
         run: |
           mkdir -p build
           python scripts/native/build.py --fetch --jobs 2 --check > build/native-build.log 2>&1
       - name: Test configurable HTTP binding
+        if: '!inputs.artifact_run'
         run: cargo test --locked --release -p compute_tools --lib http::server::tests -- --nocapture
       - name: Assemble developer archive
+        if: '!inputs.artifact_run'
         run: python scripts/native/bundle.py build/supabricks-engine-${{ matrix.target }}
+      - name: Download archives for runtime replay
+        if: inputs.artifact_run
+        uses: actions/download-artifact@v4
+        with:
+          name: native-engine-${{ matrix.target }}
+          path: build/replay
+          run-id: ${{ inputs.artifact_run }}
+          github-token: ${{ github.token }}
+      - name: Verify and unpack replay archive
+        if: inputs.artifact_run
+        env:
+          REPLAY_TARGET: ${{ matrix.target }}
+        run: |
+          python - <<'PY'
+          import hashlib, os, shutil, tarfile
+          from pathlib import Path
+          candidates = list(Path('build/replay').rglob(f"supabricks-engine-{os.environ['REPLAY_TARGET']}.tar.gz"))
+          assert len(candidates) == 1, 'expected one prior engine archive'
+          archive = candidates[0]
+          checksum = archive.with_name(archive.name + '.sha256').read_text().split()[0]
+          with archive.open('rb') as stream:
+              assert hashlib.file_digest(stream, 'sha256').hexdigest() == checksum
+          with tarfile.open(archive) as tar:
+              tar.extractall('build', filter='data')
+          destination = Path('build') / archive.name.removesuffix('.tar.gz')
+          shutil.copy2(destination / 'manifest.json', 'build/native-build.json')
+          shutil.copy2(archive, Path('build') / archive.name)
+          shutil.copy2(archive.with_name(archive.name + '.sha256'), Path('build') / (archive.name + '.sha256'))
+          PY
       - name: Relocation, SQL, branch and compute restart
         run: python scripts/native/smoke.py build/supabricks-engine-${{ matrix.target }} --report build/native-smoke.json
       - name: Minimal Linux runtime without external networking or build tools
         if: runner.os == 'Linux'
         run: |
+          sudo apt-get update
           sudo apt-get install -y debootstrap
           sudo bash scripts/native/clean-linux.sh build/supabricks-engine-linux-x86_64.tar.gz build/native-clean-linux > build/native-clean-linux.log 2>&1
       - name: Developer artifacts and evidence
@@ -77,6 +120,7 @@ jobs:
           path: |
             build/native-build.log
             build/native-smoke.json
+            build/native-smoke-logs-*/
             build/native-clean-linux.log
             build/native-clean-linux/
             build/native-build.json

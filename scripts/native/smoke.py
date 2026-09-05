@@ -63,7 +63,18 @@ class Cell:
     def stop(self, process, abrupt=False):
         self.expected_stops.add(process.pid)
         if process.poll() is None:
-            os.killpg(process.pid, signal.SIGKILL if abrupt else signal.SIGTERM)
+            name = next(name for name, child in self.processes if child is process)
+            if not abrupt and name in {"main", "child"}:
+                # compute_ctl's signal handler can exit before Postgres finishes
+                # its shutdown checkpoint. Wait for PG before reusing PGDATA.
+                subprocess.run([str(self.pg / "pg_ctl"), "-D", str(self.root / f"{name}-pgdata"),
+                                "-m", "fast", "-w", "-t", "45", "stop"],
+                               env=self.env, cwd=self.root, check=True, timeout=50,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            try:
+                os.killpg(process.pid, signal.SIGKILL if abrupt else signal.SIGTERM)
+            except ProcessLookupError:
+                pass
             try:
                 process.wait(timeout=45)
             except subprocess.TimeoutExpired:
@@ -242,6 +253,12 @@ def main():
         print(json.dumps(report, indent=2))
     except BaseException:
         print(f"Failed test state and logs retained: {root}", flush=True)
+        failure_logs = Path(tempfile.mkdtemp(prefix=args.report.stem + "-logs-", dir=args.report.parent))
+        for log in root.glob("*.log"):
+            shutil.copy2(log, failure_logs / log.name)
+            print(f"--- {log.name} (last 60 lines) ---\n" +
+                  "\n".join(log.read_text(errors="replace").splitlines()[-60:]), flush=True)
+        print(f"Service logs copied to: {failure_logs}", flush=True)
         raise
     finally:
         cell.close()

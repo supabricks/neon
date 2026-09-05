@@ -85,6 +85,9 @@ overrides removed; every non-system library must resolve inside the bundle.
 Linux CI additionally bootstraps a minimal Ubuntu userspace and repeats runtime
 checks as a non-root user with build tools absent and networking limited to an
 isolated loopback interface. This uses the runner's kernel, not a separate VM.
+Runtime replay can consume a prior run's checksum-verified archives without
+recompilation. Failed service logs are exported, and graceful fixture shutdown
+waits for PostgreSQL itself before reusing the compute data directory.
 
 ## EC-0002: Configure compute_ctl HTTP bind address for native use
 *Category: behavior · Origin: ours · Upstream status: upstreamable · Owner: Supabricks platform maintainers*
