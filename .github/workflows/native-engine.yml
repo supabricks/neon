@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: native-engine-${{ github.ref }}
+  group: native-engine-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
