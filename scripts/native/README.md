@@ -83,6 +83,15 @@ tests both targets without private Neon actions or secrets. It retains logs and
 developer artifacts. Successful Linux results do not qualify macOS, and passing
 this smoke does not complete the platform's release checklist.
 
+Linux CI also runs `clean-linux.sh` as root on its disposable runner. It verifies
+the archive checksum and uses [debootstrap](https://manpages.ubuntu.com/manpages/noble/man8/debootstrap.8.html)
+to prepare an Ubuntu 24.04 minimal userspace with Python for the test harness.
+The runtime phase uses separate mount, PID, IPC and network namespaces, exposes
+only loopback, and executes as a non-root user. It asserts that compilers, Cargo,
+Java, Docker and Homebrew are absent before repeating the relocated smoke. The
+package inventory and results are retained. This tests a minimal userspace on
+the runner's kernel; it does not qualify other Linux distributions or macOS.
+
 ## Source updates and remaining release gates
 
 First reproduce the PG17 gitlink in the inspected Neon baseline, then qualify

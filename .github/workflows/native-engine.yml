@@ -63,6 +63,11 @@ jobs:
         run: python scripts/native/bundle.py build/supabricks-engine-${{ matrix.target }}
       - name: Relocation, SQL, branch and compute restart
         run: python scripts/native/smoke.py build/supabricks-engine-${{ matrix.target }} --report build/native-smoke.json
+      - name: Minimal Linux runtime without external networking or build tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y debootstrap
+          sudo bash scripts/native/clean-linux.sh build/supabricks-engine-linux-x86_64.tar.gz build/native-clean-linux > build/native-clean-linux.log 2>&1
       - name: Developer artifacts and evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -72,6 +77,8 @@ jobs:
           path: |
             build/native-build.log
             build/native-smoke.json
+            build/native-clean-linux.log
+            build/native-clean-linux/
             build/native-build.json
             build/supabricks-engine-*.tar.gz
             build/supabricks-engine-*.sha256
