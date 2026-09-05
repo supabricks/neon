@@ -37,6 +37,8 @@ jobs:
       CARGO_PROFILE_RELEASE_DEBUG: 'false'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -52,13 +54,15 @@ jobs:
         run: rustup toolchain install 1.88.0 --profile minimal
       - uses: Swatinem/rust-cache@v2
       - name: Build PG17 and engine; run PostgreSQL regression suite
-        run: python scripts/native/build.py --fetch --jobs 2 --check > native-build.log 2>&1
+        run: |
+          mkdir -p build
+          python scripts/native/build.py --fetch --jobs 2 --check > build/native-build.log 2>&1
       - name: Test configurable HTTP binding
         run: cargo test --locked --release -p compute_tools --lib http::server::tests -- --nocapture
       - name: Assemble developer archive
         run: python scripts/native/bundle.py build/supabricks-engine-${{ matrix.target }}
       - name: Relocation, SQL, branch and compute restart
-        run: python scripts/native/smoke.py build/supabricks-engine-${{ matrix.target }} --report native-smoke.json
+        run: python scripts/native/smoke.py build/supabricks-engine-${{ matrix.target }} --report build/native-smoke.json
       - name: Developer artifacts and evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,8 +70,8 @@ jobs:
           name: native-engine-${{ matrix.target }}
           compression-level: 0
           path: |
-            native-build.log
-            native-smoke.json
+            build/native-build.log
+            build/native-smoke.json
             build/native-build.json
             build/supabricks-engine-*.tar.gz
             build/supabricks-engine-*.sha256

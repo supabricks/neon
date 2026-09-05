@@ -54,6 +54,9 @@ name collisions. Linux retains glibc/the system loader; macOS retains OS system
 libraries and uses ad-hoc signing after relocation edits. This is not Developer
 ID signing/notarization. The archive has a SHA-256 sidecar; its manifest also
 records file hashes, symlink destinations and original library provenance.
+Before writing the manifest, assembly resolves every packaged binary's library
+dependencies again with loader overrides removed and rejects dependencies outside
+the bundle except the explicitly retained operating-system libraries.
 
 The smoke verifies recorded file hashes, copies the bundle to a path containing
 spaces, strips library-path overrides, starts an isolated cell and connects

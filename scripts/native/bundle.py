@@ -17,8 +17,8 @@ from build import BINARIES, ROOT, digest, output
 SYSTEM_LINUX = re.compile(r"^(ld-linux.*|lib(c|m|dl|pthread|rt|resolv|util)\.so(?:\..*)?)$")
 
 
-def capture(*args):
-    return subprocess.check_output(list(map(str, args)), text=True).strip()
+def capture(*args, env=None):
+    return subprocess.check_output(list(map(str, args)), text=True, env=env).strip()
 
 
 def command(*args):
@@ -32,16 +32,16 @@ def binary(path):
         return stream.read(4) in {b"\x7fELF", b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf"}
 
 
-def dependencies(path, system):
+def dependencies(path, system, env=None):
     if system == "Linux":
-        listing = capture("ldd", path)
+        listing = capture("ldd", path, env=env)
         if "not found" in listing:
             raise ValueError(f"unresolved dependency for {path}:\n{listing}")
         return [(name, Path(source)) for name, source in re.findall(
-            r"^\s*(\S+) => (/\S+) \(", listing, re.MULTILINE
+            r"^\s*(\S+) => (/.+?) \(", listing, re.MULTILINE
         ) if not SYSTEM_LINUX.match(name)]
     result = []
-    for line in capture("otool", "-L", path).splitlines()[1:]:
+    for line in capture("otool", "-L", path, env=env).splitlines()[1:]:
         name = line.strip().split(" (", 1)[0]
         if name.startswith(("/usr/lib/", "/System/Library/")):
             continue
@@ -49,7 +49,7 @@ def dependencies(path, system):
         source = source.replace("@executable_path", str(path.parent))
         if source.startswith("@rpath/"):
             rpaths = re.findall(r"cmd LC_RPATH\n\s*cmdsize \d+\n\s*path (.*?) \(offset",
-                                capture("otool", "-l", path))
+                                capture("otool", "-l", path, env=env))
             candidates = [Path(r.replace("@loader_path", str(path.parent))) / source[7:]
                           for r in rpaths]
             source = next((str(p) for p in candidates if p.exists()), source)
@@ -121,8 +121,19 @@ def assemble(destination):
                 command("install_name_tool", "-id", f"@loader_path/{target.name}", target)
             command("codesign", "--force", "--sign", "-", target)
 
+    # A successful copy is insufficient if loader metadata still selects a
+    # library from the builder. Resolve the finished closure without overrides.
+    clean_env = {key: value for key, value in os.environ.items()
+                 if key not in {"LD_LIBRARY_PATH", "LD_PRELOAD", "DYLD_LIBRARY_PATH",
+                                "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES"}}
+    for target, _ in patches:
+        for name, dependency in dependencies(target, system, env=clean_env):
+            if not dependency.resolve().is_relative_to(destination):
+                raise ValueError(f"packaged dependency escapes bundle: {target}: {name} -> {dependency}")
+
     report["bundle"] = {
         "kind": "developer", "system_libraries": "glibc/loader" if system == "Linux" else "macOS SDK",
+        "loader_check": "passed without library-path overrides",
         "external_libraries": external,
         "license_inventory": "primary licenses included; transitive distribution audit pending",
         "files": {str(p.relative_to(destination)): digest(p) for p in sorted(destination.rglob("*"))

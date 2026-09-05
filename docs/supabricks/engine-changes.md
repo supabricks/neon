@@ -78,6 +78,11 @@ abrupt compute restart). The smoke's LocalFs test backend does not qualify S3
 or acknowledged-object durability. Platform E01 reports record results/limits;
 do not infer macOS qualification from Linux results.
 
+CI checks out the exact PR head rather than a synthetic merge commit, and stores
+generated logs under the ignored build directory so they do not mislabel source
+cleanliness. Assembly rechecks the finished dependency closure with loader
+overrides removed; every non-system library must resolve inside the bundle.
+
 ## EC-0002: Configure compute_ctl HTTP bind address for native use
 *Category: behavior · Origin: ours · Upstream status: upstreamable · Owner: Supabricks platform maintainers*
 
