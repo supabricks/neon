@@ -94,3 +94,13 @@ to PostgreSQL or storage protocols is involved.
 **Verification**: bind both real HTTP listeners with an explicit loopback address
 in the compute_tools test, and launch compute_ctl with that option in native
 SQL/branch/restart qualification. Invalid addresses are rejected by clap's IP parser.
+
+### EC-0001 PG17 source qualification
+
+The original PG17.5 gitlink passed 222 PostgreSQL regressions and the relocated
+Linux SQL/branch/compute-restart smoke. Advance `vendor/postgres-v17` and its
+version record together to the existing Supabricks PG17.8 source commit
+`56692dfb680281a963c7470fc7f0fec7f65ecfd4`, then rerun those gates. The other
+PG gitlinks remain header-only build inputs. This source selection introduces
+no new Postgres core patch. The current upstream PG17 minor, full source/license
+inventory and public-release qualification remain required before preview.
