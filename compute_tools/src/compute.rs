@@ -114,6 +114,8 @@ pub struct ComputeNodeParams {
     pub external_http_port: u16,
     /// The port that the compute's internal HTTP server listens on
     pub internal_http_port: u16,
+    /// Bind address shared by both HTTP services.
+    pub http_listen_addr: std::net::IpAddr,
 
     /// the address of extension storage proxy gateway
     pub remote_ext_base_url: Option<Url>,
@@ -649,6 +651,7 @@ impl ComputeNode {
         // requests while configuration is still in progress.
         crate::http::server::Server::External {
             port: this.params.external_http_port,
+            addr: this.params.http_listen_addr,
             config: this.compute_ctl_config.clone(),
             compute_id: this.params.compute_id.clone(),
             instance_id: this.params.instance_id.clone(),
@@ -659,6 +662,7 @@ impl ComputeNode {
         // sense in waiting.
         crate::http::server::Server::Internal {
             port: this.params.internal_http_port,
+            addr: this.params.http_listen_addr,
         }
         .launch(&this);
 
