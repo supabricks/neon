@@ -62,6 +62,11 @@ branch after ingestion, parent/child isolation, graceful compute restart, and
 acknowledged data after abrupt compute termination. Compute directories are
 freshly reconstructed by `compute_ctl` on restart.
 
+The fixture enables lazy SLRU download and requires a positive SLRU request
+counter. It also builds a GiST index over data larger than shared_buffers and
+queries it concurrently after restart. These cases exercise the PG17.8 extension
+adaptation recorded in EC-0003; they do not qualify every sharded/replica path.
+
 Every fixture service uses loopback and disposable ports/data. The harness
 owns its process groups, stops them on exit and retains logs on failure. The
 fixture uses trusted local credentials and **LocalFs test remote storage**:
@@ -87,4 +92,4 @@ Outstanding distribution work includes full transitive license/source inventory,
 clean-host and externally-offline tests, macOS Developer ID/notarization policy,
 S3 acknowledgment durability, supervisor lifecycle and artifact signing. A
 developer archive is not marked `qualified` in the platform component lock.
-Engine changes are recorded in [EC-0001/EC-0002](../../docs/supabricks/engine-changes.md).
+Engine changes are recorded in [EC-0001–EC-0003](../../docs/supabricks/engine-changes.md).

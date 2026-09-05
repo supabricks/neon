@@ -2,10 +2,12 @@
 """Exercise a relocated PG17 engine bundle in an isolated, disposable cell."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
 import shutil
+import re
 import signal
 import socket
 import subprocess
@@ -163,7 +165,8 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
     def exercise(self):
         self.start_storage()
         self.api("PUT", f"tenant/{self.tenant}/location_config",
-                 {"mode": "AttachedSingle", "generation": 1, "tenant_conf": {}})
+                 {"mode": "AttachedSingle", "generation": 1,
+                  "tenant_conf": {"lazy_slru_download": True}})
         self.api("POST", f"tenant/{self.tenant}/timeline", {"new_timeline_id": self.main, "pg_version": 17})
         parent = self.compute("main", self.main, self.sqlmain, self.extmain, self.intmain)
         version = self.sql(self.sqlmain, "SHOW server_version_num")
@@ -171,6 +174,13 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
         self.sql(self.sqlmain, "CREATE TABLE orders(id integer PRIMARY KEY, amount numeric(12,2)); "
                               "INSERT INTO orders SELECT i, i * 1.25 FROM generate_series(1,1000) i;")
         assert self.sql(self.sqlmain, "SELECT count(*), sum(amount) FROM orders") == "1000|625625.00"
+        # Exceed shared_buffers and exercise bulk index writes after the
+        # maintained PG17 series removed the redundant block-LSN callbacks.
+        self.sql(self.sqlmain, "CREATE TABLE history(id int, span int4range, pad text); "
+                 "ALTER TABLE history ALTER COLUMN pad SET STORAGE PLAIN; "
+                 "INSERT INTO history SELECT i, int4range(i, i+1), repeat(md5(i::text),64) "
+                 "FROM generate_series(1,10000) i; CREATE INDEX ON history USING gist(span);")
+        self.sql(self.sqlmain, "VACUUM ANALYZE history")
         point = self.sql(self.sqlmain, "SELECT pg_current_wal_flush_lsn()")
         self.wait(lambda: lsn(self.api("GET", f"tenant/{self.tenant}/timeline/{self.main}")["last_record_lsn"]) >= lsn(point))
         self.api("POST", f"tenant/{self.tenant}/timeline", {
@@ -182,14 +192,25 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
         self.stop(child)
         self.compute("child", self.child, self.sqlchild, self.extchild, self.intchild)
         assert self.sql(self.sqlchild, "SELECT amount FROM orders WHERE id = 1") == "99.99"
+        def historical_read(_):
+            return self.sql(self.sqlchild, "SET enable_seqscan=off; "
+                            "SELECT id FROM history WHERE span @> 7319").splitlines()[-1]
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            assert list(pool.map(historical_read, range(16))) == ["7319"] * 16
         # An acknowledged write must survive abrupt loss of the compute group.
         self.stop(parent, abrupt=True)
         self.compute("main", self.main, self.sqlmain, self.extmain, self.intmain)
         assert self.sql(self.sqlmain, "SELECT count(*), sum(amount) FROM orders") == "1000|625625.00"
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.pshttp}/metrics", timeout=10) as response:
+            metrics = response.read().decode()
+        slru = re.search(r'pageserver_smgr_query_started_global_count\{[^\n]*get_slru_segment[^\n]*\} ([0-9.]+)', metrics)
+        assert slru and float(slru.group(1)) > 0, "lazy SLRU downloads were not exercised"
         return {"status": "PASS", "postgres_version_num": int(version), "branch_lsn": point,
                 "checks": ["relocated bundle with spaces", "PG17 SQL and exact decimals",
                            "explicit-LSN branch", "parent/child isolation", "graceful compute restart",
-                           "acknowledged writes survive abrupt compute restart"],
+                           "acknowledged writes survive abrupt compute restart",
+                           "GiST index and concurrent reads after cache eviction/restart",
+                           "lazy SLRU download exercised"],
                 "limits": ["LocalFs test remote backend", "no S3 or power-loss qualification",
                            "trusted local test credentials", "not a platform lifecycle test"]}
 

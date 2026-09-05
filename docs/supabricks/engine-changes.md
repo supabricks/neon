@@ -104,3 +104,35 @@ version record together to the existing Supabricks PG17.8 source commit
 PG gitlinks remain header-only build inputs. This source selection introduces
 no new Postgres core patch. The current upstream PG17 minor, full source/license
 inventory and public-release qualification remain required before preview.
+
+## EC-0003: Match the maintained PG17 extension interfaces
+*Category: hook · Origin: ours · Upstream status: upstreamable · Owner: Supabricks platform maintainers*
+
+**What**: adapt the Neon extension and WAL-redo extension to the existing PG17.8
+patch series. Skip registration of removed block-LSN hooks, allocate the
+last-written-LSN lock as an extension-owned named tranche when core no longer
+defines it, and install the independent SLRU download hook. The legacy interfaces
+remain for the pinned older majors. The PG17.8 threshold describes the qualified
+Supabricks patch series, not a promise about arbitrary vanilla PG17 headers.
+
+**Why**: the PG branch contains `a42a079b61c053e35c35e63cfd52449da92b5ddb`
+(remove redundant block-LSN hooks), `9aa0b42bfd49d3842c6436f50fd9baabbd005b0a`
+(move the lock into the extension), and `c93daf0889e17bf7cf9184d12c4aff9ed4d5084c`
+(move SLRU download/materialization out of core), but the engine's extension
+still expected the old interfaces. No PostgreSQL core patch is added here.
+
+The SLRU adapter materializes a complete file before exposing it. It uses an
+atomic hard-link operation that does not replace an existing destination, so a
+concurrent downloader cannot overwrite a segment another backend has already
+materialized and modified. This is a disposable compute cache, reconstructed
+on startup; remote storage and WAL remain authoritative.
+
+**Exit plan**: adopt the upstream equivalent when available. Remove legacy
+interface branches only when the corresponding engine majors are retired.
+
+**Verification**: PG17.8 native build and 224 PostgreSQL regression tests passed
+on Linux. Expanded relocation smoke passed SQL/decimals, explicit-LSN branching,
+isolation, graceful/abrupt compute restart, GiST index reads after exceeding the
+buffer cache, concurrent readers and positive SLRU-request metrics with lazy
+download enabled. macOS and broader sharded/replica tests remain separate gates;
+the native smoke is not a replacement for the full Neon regression suite.
