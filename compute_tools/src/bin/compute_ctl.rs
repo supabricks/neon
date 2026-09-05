@@ -82,6 +82,10 @@ struct Cli {
     #[arg(long, default_value_t = 3081)]
     pub internal_http_port: u16,
 
+    /// IP address for both HTTP services. Use 127.0.0.1 for a local runtime.
+    #[arg(long, default_value = "::")]
+    pub http_listen_addr: std::net::IpAddr,
+
     /// Backwards-compatible --http-port for Hadron deployments. Functionally the
     /// same as --external-http-port.
     #[arg(
@@ -256,6 +260,7 @@ fn main() -> Result<()> {
             pgversion: get_pg_version_string(&cli.pgbin),
             external_http_port,
             internal_http_port,
+            http_listen_addr: cli.http_listen_addr,
             remote_ext_base_url: cli.remote_ext_base_url.clone(),
             resize_swap_on_bind: cli.resize_swap_on_bind,
             set_disk_quota_for_fs: cli.set_disk_quota_for_fs,

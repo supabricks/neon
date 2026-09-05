@@ -47,3 +47,50 @@ wired it into main).
 PG 18 — can ship otherwise. Also the supply-chain/sovereignty requirement.
 **Exit plan**: none needed; this is ownership, not divergence.
 **Verification**: the built images pass the platform's e2e/chaos/restore gates.
+
+### 2026-09-05 addendum: native PG17 distribution first
+
+*Owner: Supabricks platform maintainers · Status: implementation in progress*
+
+The first Supabricks native bundle targets PG17 on Linux x86_64 and macOS arm64.
+PG18 remains subsequent integration work: the current engine's bindings, version
+dispatch and WAL handling implement PG14–17. Native packaging precedes new images.
+
+**What**: `scripts/native/` build, bundle and isolated smoke tools; standalone
+native CI; `pgxn/neon/Makefile` isolates PostgreSQL C warning flags from the Rust
+communicator's third-party C dependencies. All four pinned PG source trees supply
+build headers; only PG17 is compiled and packaged as a compute. No private CI
+action or token is required. Record source pins, compiler settings, dependencies
+and artifact checksums. Preserve the distinction between a developer archive
+and a qualified distribution.
+
+**Why**: local installation requires native, relocatable engine binaries.
+Unconditionally inherited PGXS `-Werror=vla` breaks jemalloc compilation when
+Cargo rebuilds the communicator inside an extension build. Separate
+`NEON_RUST_CFLAGS`/`NEON_RUST_CXXFLAGS` carry explicitly selected Rust C flags.
+
+**Exit plan**: upstream the narrow Makefile correction where practical; native
+distribution scripts remain Supabricks-owned build infrastructure.
+
+**Verification**: clean native source build, PostgreSQL regression suite,
+relocated archive smoke (SQL, explicit-LSN branching, isolation, graceful and
+abrupt compute restart). The smoke's LocalFs test backend does not qualify S3
+or acknowledged-object durability. Platform E01 reports record results/limits;
+do not infer macOS qualification from Linux results.
+
+## EC-0002: Configure compute_ctl HTTP bind address for native use
+*Category: behavior · Origin: ours · Upstream status: upstreamable · Owner: Supabricks platform maintainers*
+
+**What**: add `--http-listen-addr` to `compute_ctl`, pass the parsed IP to both
+HTTP listeners. Default remains `::` for existing deployments; the native
+harness supplies `127.0.0.1` explicitly.
+
+**Why**: the inherited internal and external HTTP servers both listen on all
+interfaces. A per-user native cell needs a loopback-only management surface.
+
+**Exit plan**: replace with the upstream equivalent if one is adopted; no change
+to PostgreSQL or storage protocols is involved.
+
+**Verification**: bind both real HTTP listeners with an explicit loopback address
+in the compute_tools test, and launch compute_ctl with that option in native
+SQL/branch/restart qualification. Invalid addresses are rejected by clap's IP parser.
