@@ -66,6 +66,8 @@ acknowledged data after abrupt compute termination. Compute directories are
 freshly reconstructed by `compute_ctl` on restart.
 Graceful fixture shutdown uses `pg_ctl -w stop` before terminating the controller,
 so a replacement cannot reuse PGDATA while the old postmaster is still stopping.
+The TCP-only fixture disables Unix sockets and waits for abruptly killed process
+groups to be reaped before restart.
 The fixture disables core dumps with a zero hard limit before starting any
 services, exercising the ordinary-user startup correction in EC-0004.
 
@@ -96,7 +98,8 @@ Linux CI also runs `clean-linux.sh` as root on its disposable runner. It verifie
 the archive checksum and uses [debootstrap](https://manpages.ubuntu.com/manpages/noble/man8/debootstrap.8.html)
 to prepare an Ubuntu 24.04 minimal userspace with Python for the test harness.
 The runtime phase uses separate mount, PID, IPC and network namespaces, exposes
-only loopback, and executes as a non-root user. It asserts that compilers, Cargo,
+only loopback, runs Tini as PID 1 to reap orphaned children, and executes the
+engine as a non-root user. It asserts that compilers, Cargo,
 Java, Docker and Homebrew are absent before repeating the relocated smoke. The
 package inventory and results are retained. This tests a minimal userspace on
 the runner's kernel; it does not qualify other Linux distributions or macOS.

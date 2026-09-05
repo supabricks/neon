@@ -109,7 +109,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y debootstrap
+          sudo apt-get install -y debootstrap tini
           sudo bash scripts/native/clean-linux.sh build/supabricks-engine-linux-x86_64.tar.gz build/native-clean-linux > build/native-clean-linux.log 2>&1
       - name: Developer artifacts and evidence
         if: always()

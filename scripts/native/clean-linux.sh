@@ -3,7 +3,7 @@
 set -euo pipefail
 
 if [[ $EUID != 0 || $# != 2 ]]; then
-  echo "Usage: sudo $0 ARCHIVE NEW_REPORT_DIRECTORY (requires debootstrap and unshare)" >&2
+  echo "Usage: sudo $0 ARCHIVE NEW_REPORT_DIRECTORY (requires debootstrap, unshare and tini)" >&2
   exit 2
 fi
 archive=$(realpath "$1")
@@ -42,7 +42,7 @@ chroot "$runtime_root" dpkg-query -W > "$reports/packages.txt"
 
 # These mounts and the loopback interface exist only in the new namespaces.
 # The engine runs as an ordinary user; bootstrap is the only networked phase.
-unshare --mount --net --pid --ipc --fork bash -euc '
+unshare --mount --net --pid --ipc --fork tini -- bash -euc '
   mount -t proc proc "$1/proc"
   mount --rbind /dev "$1/dev"
   mount -t tmpfs -o mode=1777 tmpfs "$1/dev/shm"

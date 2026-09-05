@@ -81,6 +81,16 @@ class Cell:
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait(timeout=10)
                 raise RuntimeError("graceful shutdown timed out")
+            if abrupt:
+                deadline = time.monotonic() + 10
+                while True:
+                    try:
+                        os.killpg(process.pid, 0)
+                    except ProcessLookupError:
+                        break
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError(f"process group {process.pid} was not reaped")
+                    time.sleep(0.02)
 
     def close(self):
         for _, process in reversed(self.processes):
@@ -148,6 +158,7 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
     def compute(self, name, timeline, sqlport, external, internal):
         settings = {
             "listen_addresses": "127.0.0.1", "port": str(sqlport), "shared_buffers": "16MB",
+            "unix_socket_directories": "",
             "max_connections": "30", "wal_level": "logical", "wal_log_hints": "on",
             "max_wal_senders": "10", "max_replication_slots": "10", "fsync": "on",
             "synchronous_commit": "on", "synchronous_standby_names": "walproposer",
