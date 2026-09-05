@@ -74,6 +74,7 @@ def assemble(destination):
     (destination / "lib").mkdir()
     (destination / "licenses").mkdir()
     shutil.copy2(ROOT / "LICENSE", destination / "licenses/neon.txt")
+    shutil.copy2(ROOT / "NOTICE", destination / "licenses/neon-NOTICE.txt")
     shutil.copy2(ROOT / "vendor/postgres-v17/COPYRIGHT", destination / "licenses/postgres.txt")
     shutil.copytree(ROOT / "pg_install/v17", destination / "pg_install/v17", symlinks=True)
     for name in BINARIES:
