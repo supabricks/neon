@@ -53,7 +53,7 @@ use compute_tools::params::*;
 use compute_tools::pg_isready::get_pg_isready_bin;
 use compute_tools::spec::*;
 use compute_tools::{hadron_metrics, installed_extensions, logger::*};
-use rlimit::{Resource, setrlimit};
+use rlimit::{Resource, getrlimit, setrlimit};
 use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook::iterator::Signals;
 use tracing::{error, info};
@@ -235,8 +235,14 @@ fn main() -> Result<()> {
 
     let (tracing_provider, _file_logs_guard) = init(cli.dev, log_dir)?;
 
-    // enable core dumping for all child processes
-    setrlimit(Resource::CORE, rlimit::INFINITY, rlimit::INFINITY)?;
+    // Enable child core dumps only within the limit inherited from the host.
+    // An ordinary local user cannot raise a hard limit (often zero under sudo
+    // or a service manager), and disabled core dumps must not prevent startup.
+    let (soft_core_limit, hard_core_limit) = getrlimit(Resource::CORE)?;
+    if soft_core_limit < hard_core_limit {
+        setrlimit(Resource::CORE, hard_core_limit, hard_core_limit)
+            .context("setting the core-dump soft limit within the inherited hard limit")?;
+    }
 
     if cli.lakebase_mode {
         installed_extensions::initialize_metrics();

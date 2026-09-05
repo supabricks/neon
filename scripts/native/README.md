@@ -64,6 +64,8 @@ using its bundled `psql`. It verifies PG17 and exact decimals, an explicit-LSN
 branch after ingestion, parent/child isolation, graceful compute restart, and
 acknowledged data after abrupt compute termination. Compute directories are
 freshly reconstructed by `compute_ctl` on restart.
+The fixture disables core dumps with a zero hard limit before starting any
+services, exercising the ordinary-user startup correction in EC-0004.
 
 The fixture enables lazy SLRU download and requires a positive SLRU request
 counter. It also builds a GiST index over data larger than shared_buffers and
@@ -104,4 +106,4 @@ Outstanding distribution work includes full transitive license/source inventory,
 clean-host and externally-offline tests, macOS Developer ID/notarization policy,
 S3 acknowledgment durability, supervisor lifecycle and artifact signing. A
 developer archive is not marked `qualified` in the platform component lock.
-Engine changes are recorded in [EC-0001–EC-0003](../../docs/supabricks/engine-changes.md).
+Engine changes are recorded in [EC-0001–EC-0004](../../docs/supabricks/engine-changes.md).

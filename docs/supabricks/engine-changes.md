@@ -144,3 +144,22 @@ isolation, graceful/abrupt compute restart, GiST index reads after exceeding the
 buffer cache, concurrent readers and positive SLRU-request metrics with lazy
 download enabled. macOS and broader sharded/replica tests remain separate gates;
 the native smoke is not a replacement for the full Neon regression suite.
+
+## EC-0004: Respect the host's core-dump hard limit
+*Category: behavior · Origin: ours · Upstream status: upstreamable · Owner: Supabricks platform maintainers*
+
+**What**: `compute_ctl` raises the core-dump soft limit only as far as the
+inherited hard limit permits. It leaves a zero hard limit intact.
+
+**Why**: startup previously attempted to set both limits to infinity. That
+fails with `EPERM` for an ordinary user under a policy that disables core dumps,
+including the minimal Linux CI environment after dropping root privileges.
+Crash-dump policy must not prevent the local database from starting.
+
+**Exit plan**: adopt an upstream equivalent if available. This changes process
+initialization only, with no PostgreSQL or storage protocol changes.
+
+**Verification**: the original binary fails before reading its configuration
+when started with `RLIMIT_CORE=(0,0)`. The native smoke now imposes that policy
+on itself and all child services, then exercises the full SQL/branch/restart
+workflow on both platforms. Minimal Linux qualification repeats it offline.

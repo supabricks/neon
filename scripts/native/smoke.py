@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import shutil
 import re
+import resource
 import signal
 import socket
 import subprocess
@@ -207,6 +208,7 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
         assert slru and float(slru.group(1)) > 0, "lazy SLRU downloads were not exercised"
         return {"status": "PASS", "postgres_version_num": int(version), "branch_lsn": point,
                 "checks": ["relocated bundle with spaces", "PG17 SQL and exact decimals",
+                           "startup with core dumps disabled",
                            "explicit-LSN branch", "parent/child isolation", "graceful compute restart",
                            "acknowledged writes survive abrupt compute restart",
                            "GiST index and concurrent reads after cache eviction/restart",
@@ -220,6 +222,9 @@ def main():
     parser.add_argument("bundle", type=Path)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
+    # This changes only the harness process and its descendants. Native
+    # services must start under a host policy that forbids core dumps.
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     manifest = json.loads((args.bundle / "manifest.json").read_text())
     for name, checksum in manifest["bundle"]["files"].items():
         path = (args.bundle / name).resolve()
