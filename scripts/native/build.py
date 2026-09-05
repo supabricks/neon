@@ -68,6 +68,28 @@ def main():
     os.environ["CARGO_PROFILE_RELEASE_DEBUG"] = "false"
     os.environ["NEON_RUST_CFLAGS"] = os.environ.get("CFLAGS", "")
     os.environ["NEON_RUST_CXXFLAGS"] = os.environ.get("CXXFLAGS", "")
+    stamp = ROOT / "build/native-source-pins.json"
+    configuration = {
+        "sources": sources,
+        "cflags": os.environ.get("CFLAGS", ""),
+        "ldflags": os.environ.get("LDFLAGS", ""),
+        "makefiles": {name: digest(ROOT / name) for name in ("Makefile", "postgres.mk")},
+    }
+    previous = json.loads(stamp.read_text()) if stamp.exists() else None
+    if previous != configuration:
+        # PostgreSQL's out-of-tree config.status can outlive a changed gitlink.
+        # Never report a new source pin while reusing the previous PG build.
+        for version in (14, 15, 16, 17):
+            for directory in (ROOT / f"build/v{version}", ROOT / f"build/pgxn-v{version}",
+                              ROOT / f"pg_install/v{version}"):
+                if directory.is_symlink():
+                    parser.error(f"refusing to replace symlinked build directory: {directory}")
+                if directory.exists():
+                    shutil.rmtree(directory)
+        if (ROOT / "build/walproposer-lib").exists():
+            shutil.rmtree(ROOT / "build/walproposer-lib")
+        stamp.parent.mkdir(exist_ok=True)
+        stamp.write_text(json.dumps(configuration, indent=2) + "\n")
     common = ["make", f"-j{args.jobs}", "BUILD_TYPE=release", "CARGO_BUILD_FLAGS=--locked"]
     run(*common, "postgres-headers-install", "postgres-install-v17")
     run(*common, "POSTGRES_VERSIONS=v17", "walproposer-lib")
