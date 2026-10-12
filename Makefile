@@ -70,7 +70,7 @@ ifeq ($(UNAME_S),Linux)
 		PG_CONFIGURE_OPTS += --with-libseccomp
 	endif
 else ifeq ($(UNAME_S),Darwin)
-	PG_CONFIGURE_OPTS += --with-uuid=bsd
+	PG_CONFIGURE_OPTS += --with-uuid=e2fs
 	PG_CFLAGS += -DUSE_PREFETCH
 	ifndef DISABLE_HOMEBREW
 		# macOS with brew-installed openssl requires explicit paths

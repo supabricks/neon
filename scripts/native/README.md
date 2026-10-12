@@ -122,7 +122,7 @@ Engine changes are recorded in [EC-0001–EC-0004](../../docs/supabricks/engine-
 
 PG17 bundles pg_stat_statements, pgcrypto, pg_trgm, citext and uuid-ossp,
 including control/SQL files and native libraries. Linux uses libuuid (uuid-dev
-on builders); macOS uses the system BSD UUID API. The bundle dependency closure
+on builders); macOS uses the system libuuid API. The bundle dependency closure
 includes required non-system libraries. No runtime extension download is needed.
 Vector and PostGIS are not included or qualified by this release.
 
