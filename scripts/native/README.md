@@ -13,7 +13,7 @@ the inherited Makefiles; relocated runtime paths are tested with spaces.
 Ubuntu 24.04 build dependencies:
 
 ```sh
-sudo apt-get install build-essential libtool libreadline-dev zlib1g-dev flex bison \
+sudo apt-get install build-essential libtool libreadline-dev uuid-dev zlib1g-dev flex bison \
   libseccomp-dev libssl-dev clang pkg-config cmake protobuf-compiler \
   libprotobuf-dev libcurl4-openssl-dev libicu-dev patchelf
 ```
@@ -117,3 +117,17 @@ clean-host and externally-offline tests, macOS Developer ID/notarization policy,
 S3 acknowledgment durability, supervisor lifecycle and artifact signing. A
 developer archive is not marked `qualified` in the platform component lock.
 Engine changes are recorded in [EC-0001–EC-0004](../../docs/supabricks/engine-changes.md).
+
+## Managed PostgreSQL extensions
+
+PG17 bundles pg_stat_statements, pgcrypto, pg_trgm, citext and uuid-ossp,
+including control/SQL files and native libraries. Linux uses libuuid (uuid-dev
+on builders); macOS uses the system BSD UUID API. The bundle dependency closure
+includes required non-system libraries. No runtime extension download is needed.
+Vector and PostGIS are not included or qualified by this release.
+
+The platform owns the supported catalogue, required-extension protection and
+branch enable/disable contract; shipping files alone does not enable an extension
+or imply analytical support for its types. pg_stat_statements must be preloaded
+on normal computes before CREATE EXTENSION; private export computes retain their
+minimal preload list.

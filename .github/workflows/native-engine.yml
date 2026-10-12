@@ -52,7 +52,7 @@ jobs:
         if: runner.os == 'Linux' && !inputs.artifact_run
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libtool libreadline-dev zlib1g-dev flex bison libseccomp-dev libssl-dev clang pkg-config cmake protobuf-compiler libprotobuf-dev libcurl4-openssl-dev libicu-dev patchelf
+          sudo apt-get install -y build-essential libtool libreadline-dev uuid-dev zlib1g-dev flex bison libseccomp-dev libssl-dev clang pkg-config cmake protobuf-compiler libprotobuf-dev libcurl4-openssl-dev libicu-dev patchelf
       - name: macOS build tools
         if: runner.os == 'macOS' && !inputs.artifact_run
         run: brew install flex bison openssl@3 protobuf icu4c pkg-config
