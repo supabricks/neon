@@ -60,6 +60,31 @@ def dependencies(path, system, env=None):
     return result
 
 
+
+def extension_version(directory, name):
+    control = directory / (name + ".control")
+    match = re.search(r"^default_version\s*=\s*'([^']+)'", control.read_text(), re.MULTILINE)
+    if not match:
+        raise ValueError(f"missing extension default version: {name}")
+    # PostgreSQL can install an older base script and apply upgrade scripts to
+    # reach the default. pg_stat_statements and citext use this standard layout.
+    reachable = set()
+    upgrades = []
+    for path in directory.glob(name + "--*.sql"):
+        versions = path.name[len(name) + 2:-4].split("--")
+        if len(versions) == 1:
+            reachable.add(versions[0])
+        elif len(versions) == 2:
+            upgrades.append(versions)
+    while True:
+        expanded = reachable | {end for start, end in upgrades if start in reachable}
+        if expanded == reachable:
+            break
+        reachable = expanded
+    if match[1] not in reachable:
+        raise ValueError(f"no installation/upgrade path to extension default: {name}")
+    return match[1]
+
 def assemble(destination):
     system = platform.system()
     if system not in {"Linux", "Darwin"}:
@@ -136,13 +161,11 @@ def assemble(destination):
     for name in ("pg_stat_statements", "pgcrypto", "pg_trgm", "citext", "uuid-ossp"):
         directory = destination / "pg_install/v17/share/postgresql/extension"
         control = directory / (name + ".control")
-        version = re.search(r"^default_version\s*=\s*'([^']+)'", control.read_text(), re.MULTILINE)
-        if not version or not (directory / (name + "--" + version[1] + ".sql")).is_file():
-            raise ValueError(f"missing extension installation SQL: {name}")
+        version = extension_version(directory, name)
         library = destination / "pg_install/v17/lib/postgresql" / (name + ".so")
         if not library.is_file():
             raise ValueError(f"missing extension library: {library}")
-        extensions[name] = {"version": version[1], "control_sha256": digest(control), "library_sha256": digest(library)}
+        extensions[name] = {"version": version, "control_sha256": digest(control), "library_sha256": digest(library)}
 
     report["bundle"] = {
         "postgres_extensions": extensions,
