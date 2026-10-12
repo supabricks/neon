@@ -217,7 +217,7 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
         assert self.sql(self.sqlchild, "SELECT count(*) FROM orders") == "1000"
         assert self.sql(self.sqlchild, "SELECT 'Hello'::citext='hello'::citext, uuid_generate_v4() IS NOT NULL") == 't|t'
         self.sql(self.sqlchild, 'DROP EXTENSION "pg_trgm" RESTRICT')
-        assert self.sql(self.sqlmain, "SELECT count(*) FROM pg_extension WHERE extname='pg_trgm'") == '1' 
+        assert self.sql(self.sqlmain, "SELECT count(*) FROM pg_extension WHERE extname='pg_trgm'") == '1'
         self.sql(self.sqlchild, "UPDATE orders SET amount = 99.99 WHERE id = 1")
         assert self.sql(self.sqlmain, "SELECT amount FROM orders WHERE id = 1") == "1.25"
         self.stop(child)
