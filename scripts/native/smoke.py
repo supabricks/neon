@@ -168,7 +168,7 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
         }
         # All values are fixture-generated. compute_ctl also reads storage
         # connection settings from this structured list before starting PG.
-        config = {"spec": {"format_version": 1.0, "suspend_timeout_seconds": -1,
+        config = {"spec": {"format_version": 1.0, "suspend_timeout_seconds": -1, "skip_pg_stat_statements_create": True,
             "cluster": {"roles": [{"name": "cloud_admin", "encrypted_password": None, "options": None}],
                         "databases": [], "settings": [
                             {"name": k, "value": v, "vartype": "string"}
@@ -220,8 +220,10 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
         assert self.sql(self.sqlmain, "SELECT count(*) FROM pg_extension WHERE extname='pg_trgm'") == '1'
         self.sql(self.sqlchild, "UPDATE orders SET amount = 99.99 WHERE id = 1")
         assert self.sql(self.sqlmain, "SELECT amount FROM orders WHERE id = 1") == "1.25"
+        self.sql(self.sqlchild, "DROP EXTENSION pg_stat_statements RESTRICT")
         self.stop(child)
         self.compute("child", self.child, self.sqlchild, self.extchild, self.intchild)
+        assert self.sql(self.sqlchild, "SELECT count(*) FROM pg_extension WHERE extname='pg_stat_statements'") == "0"
         assert self.sql(self.sqlchild, "SELECT amount FROM orders WHERE id = 1") == "99.99"
         def historical_read(_):
             return self.sql(self.sqlchild, "SET enable_seqscan=off; "

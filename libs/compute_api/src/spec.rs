@@ -154,6 +154,11 @@ pub struct ComputeSpec {
     /// the pageserver and safekeepers.
     pub storage_auth_token: Option<String>,
 
+    /// Native platforms manage the database extension lifecycle separately from
+    /// preloading the library. Preserve explicit DROP across compute restarts.
+    #[serde(default)]
+    pub skip_pg_stat_statements_create: bool,
+
     // information about available remote extensions
     pub remote_extensions: Option<RemoteExtSpec>,
 
@@ -812,6 +817,17 @@ mod tests {
 
         // Reconfigure concurrency defaults to 1.
         assert_eq!(spec.reconfigure_concurrency, 1);
+    }
+
+    #[test]
+    fn native_extension_lifecycle_is_explicit_and_defaults_to_legacy() {
+        let file = File::open("tests/cluster_spec.json").unwrap();
+        let mut value: serde_json::Value = serde_json::from_reader(file).unwrap();
+        let legacy: ComputeSpec = serde_json::from_value(value.clone()).unwrap();
+        assert!(!legacy.skip_pg_stat_statements_create);
+        value["skip_pg_stat_statements_create"] = true.into();
+        let native: ComputeSpec = serde_json::from_value(value).unwrap();
+        assert!(native.skip_pg_stat_statements_create);
     }
 
     #[test]
