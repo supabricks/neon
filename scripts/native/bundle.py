@@ -162,7 +162,7 @@ def assemble(destination):
         directory = destination / "pg_install/v17/share/postgresql/extension"
         control = directory / (name + ".control")
         version = extension_version(directory, name)
-        library = destination / "pg_install/v17/lib/postgresql" / (name + ".so")
+        library = destination / "pg_install/v17/lib/postgresql" / (name + (".so" if system == "Linux" else ".dylib"))
         if not library.is_file():
             raise ValueError(f"missing extension library: {library}")
         extensions[name] = {"version": version, "control_sha256": digest(control), "library_sha256": digest(library)}
