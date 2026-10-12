@@ -162,7 +162,7 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
             "max_connections": "30", "wal_level": "logical", "wal_log_hints": "on",
             "max_wal_senders": "10", "max_replication_slots": "10", "fsync": "on",
             "synchronous_commit": "on", "synchronous_standby_names": "walproposer",
-            "shared_preload_libraries": "neon", "neon.tenant_id": self.tenant,
+            "shared_preload_libraries": "neon,pg_stat_statements", "neon.tenant_id": self.tenant,
             "neon.timeline_id": timeline, "neon.safekeepers": f"127.0.0.1:{self.skpg}",
             "neon.pageserver_connstring": f"host=127.0.0.1 port={self.pspg}",
         }
@@ -193,6 +193,11 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
         self.api("POST", f"tenant/{self.tenant}/timeline", {"new_timeline_id": self.main, "pg_version": 17})
         parent = self.compute("main", self.main, self.sqlmain, self.extmain, self.intmain)
         version = self.sql(self.sqlmain, "SHOW server_version_num")
+        for extension in ('pg_stat_statements', 'pgcrypto', 'pg_trgm', 'citext', 'uuid-ossp'):
+            self.sql(self.sqlmain, f'CREATE EXTENSION "{extension}"')
+        assert self.sql(self.sqlmain, "SELECT encode(digest('hello','sha256'),'hex')") == '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'
+        assert self.sql(self.sqlmain, "SELECT 'Hello'::citext = 'hello'::citext, similarity('word','word')=1, uuid_generate_v4() IS NOT NULL") == 't|t|t'
+        self.sql(self.sqlmain, "SELECT count(*) FROM pg_stat_statements")
         assert 170000 <= int(version) < 180000, version
         self.sql(self.sqlmain, "CREATE TABLE orders(id integer PRIMARY KEY, amount numeric(12,2)); "
                               "INSERT INTO orders SELECT i, i * 1.25 FROM generate_series(1,1000) i;")
@@ -210,6 +215,9 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
             "new_timeline_id": self.child, "ancestor_timeline_id": self.main, "ancestor_start_lsn": point})
         child = self.compute("child", self.child, self.sqlchild, self.extchild, self.intchild)
         assert self.sql(self.sqlchild, "SELECT count(*) FROM orders") == "1000"
+        assert self.sql(self.sqlchild, "SELECT 'Hello'::citext='hello'::citext, uuid_generate_v4() IS NOT NULL") == 't|t'
+        self.sql(self.sqlchild, 'DROP EXTENSION "pg_trgm" RESTRICT')
+        assert self.sql(self.sqlmain, "SELECT count(*) FROM pg_extension WHERE extname='pg_trgm'") == '1' 
         self.sql(self.sqlchild, "UPDATE orders SET amount = 99.99 WHERE id = 1")
         assert self.sql(self.sqlmain, "SELECT amount FROM orders WHERE id = 1") == "1.25"
         self.stop(child)
@@ -231,6 +239,7 @@ remote_storage = {{local_path = {json.dumps(str(self.root / 'remote-test-storage
         return {"status": "PASS", "postgres_version_num": int(version), "branch_lsn": point,
                 "checks": ["relocated bundle with spaces", "PG17 SQL and exact decimals",
                            "startup with core dumps disabled",
+                           "five managed extensions, native functions, branch isolation and restart",
                            "explicit-LSN branch", "parent/child isolation", "graceful compute restart",
                            "acknowledged writes survive abrupt compute restart",
                            "GiST index and concurrent reads after cache eviction/restart",

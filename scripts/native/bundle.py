@@ -132,7 +132,20 @@ def assemble(destination):
             if not dependency.resolve().is_relative_to(destination):
                 raise ValueError(f"packaged dependency escapes bundle: {target}: {name} -> {dependency}")
 
+    extensions = {}
+    for name in ("pg_stat_statements", "pgcrypto", "pg_trgm", "citext", "uuid-ossp"):
+        directory = destination / "pg_install/v17/share/postgresql/extension"
+        control = directory / (name + ".control")
+        version = re.search(r"^default_version\s*=\s*'([^']+)'", control.read_text(), re.MULTILINE)
+        if not version or not (directory / (name + "--" + version[1] + ".sql")).is_file():
+            raise ValueError(f"missing extension installation SQL: {name}")
+        library = destination / "pg_install/v17/lib/postgresql" / (name + ".so")
+        if not library.is_file():
+            raise ValueError(f"missing extension library: {library}")
+        extensions[name] = {"version": version[1], "control_sha256": digest(control), "library_sha256": digest(library)}
+
     report["bundle"] = {
+        "postgres_extensions": extensions,
         "kind": "developer", "system_libraries": "glibc/loader" if system == "Linux" else "macOS SDK",
         "loader_check": "passed without library-path overrides",
         "external_libraries": external,
