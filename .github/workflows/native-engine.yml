@@ -107,6 +107,8 @@ jobs:
           shutil.copy2(archive, Path('build') / archive.name)
           shutil.copy2(archive.with_name(archive.name + '.sha256'), Path('build') / (archive.name + '.sha256'))
           PY
+      - name: Test smoke shutdown fencing
+        run: python scripts/native/test_smoke.py
       - name: Relocation, SQL, branch and compute restart
         run: python scripts/native/smoke.py build/supabricks-engine-${{ matrix.target }} --report build/native-smoke.json
       - name: Minimal Linux runtime without external networking or build tools

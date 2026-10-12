@@ -88,6 +88,12 @@ class Cell:
                         os.killpg(process.pid, 0)
                     except ProcessLookupError:
                         break
+                    except PermissionError:
+                        # Darwin can retain a group with no signalable members
+                        # briefly while its killed processes are being reaped.
+                        # EPERM is not proof of exit: wait for ESRCH, with the
+                        # same deadline as a group that is still alive.
+                        pass
                     if time.monotonic() >= deadline:
                         raise RuntimeError(f"process group {process.pid} was not reaped")
                     time.sleep(0.02)
