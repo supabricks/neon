@@ -12,6 +12,7 @@ on:
       - '.github/workflows/native-engine.yml'
       - 'pgxn/**'
       - 'compute_tools/**'
+      - 'libs/compute_api/**'
       - 'vendor/**'
       - 'Cargo.lock'
       - 'Makefile'
@@ -70,7 +71,10 @@ jobs:
           python scripts/native/build.py --fetch --jobs 2 --check > build/native-build.log 2>&1
       - name: Test configurable HTTP binding
         if: '!inputs.artifact_run'
-        run: cargo test --locked --release -p compute_tools --lib http::server::tests -- --nocapture
+        run: |
+          cargo test --locked --release -p compute_tools --lib http::server::tests -- --nocapture
+          cargo test --locked --release -p compute_api native_extension_lifecycle_is_explicit_and_defaults_to_legacy
+          python scripts/native/test_extensions.py
       - name: Assemble developer archive
         if: '!inputs.artifact_run'
         run: python scripts/native/bundle.py build/supabricks-engine-${{ matrix.target }}
