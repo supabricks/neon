@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -39,9 +39,11 @@ use crate::compute::ComputeNode;
 pub enum Server {
     Internal {
         port: u16,
+        addr: IpAddr,
     },
     External {
         port: u16,
+        addr: IpAddr,
         config: ComputeCtlConfig,
         compute_id: String,
         instance_id: Option<String>,
@@ -191,10 +193,7 @@ impl Server {
 
     fn ip(&self) -> IpAddr {
         match self {
-            // TODO: Change this to Ipv6Addr::LOCALHOST when the GitHub runners
-            // allow binding to localhost
-            Server::Internal { .. } => IpAddr::from(Ipv6Addr::UNSPECIFIED),
-            Server::External { .. } => IpAddr::from(Ipv6Addr::UNSPECIFIED),
+            Server::Internal { addr, .. } | Server::External { addr, .. } => *addr,
         }
     }
 
@@ -243,5 +242,30 @@ impl Server {
         info!("Launching the {} server", self);
 
         tokio::spawn(self.serve(state));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    #[tokio::test]
+    async fn both_http_services_bind_the_requested_address() {
+        let addr = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        let servers = [
+            Server::Internal { port: 0, addr },
+            Server::External {
+                port: 0,
+                addr,
+                config: ComputeCtlConfig::default(),
+                compute_id: "native-test".into(),
+                instance_id: None,
+            },
+        ];
+        for server in servers {
+            let listener = server.listener().await.unwrap();
+            assert_eq!(listener.local_addr().unwrap().ip(), addr);
+        }
     }
 }

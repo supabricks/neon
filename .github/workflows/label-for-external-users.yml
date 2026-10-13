@@ -21,6 +21,8 @@ env:
 
 jobs:
   check-user:
+    # Membership lookup needs the upstream organization token.
+    if: github.repository == 'neondatabase/neon'
     runs-on: ubuntu-22.04
 
     outputs:
@@ -44,7 +46,7 @@ jobs:
         for i in $(seq 1 10); do
           if gh api "/orgs/${GITHUB_REPOSITORY_OWNER}/members/${ACTOR}" \
               -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" > ${output_file}; then
+              -H "X-GitHub-Api-Version: 2022-11-28" > ${output_file} 2>&1; then
 
             is_member=true
             break

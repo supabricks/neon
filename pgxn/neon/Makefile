@@ -71,7 +71,9 @@ communicator_process.o: communicator/communicator_bindings.h
 file_cache.o: communicator/communicator_bindings.h
 
 $(NEON_CARGO_ARTIFACT_TARGET_DIR)/libcommunicator.a communicator/communicator_bindings.h &:
-	(cd $(srcdir)/communicator && cargo build $(CARGO_BUILD_FLAGS) $(CARGO_PROFILE))
+	# PGXS exports PostgreSQL-only warnings (including -Werror=vla). Do not
+	# inherit those into Cargo's third-party C builds such as jemalloc.
+	(cd $(srcdir)/communicator && CFLAGS='$(NEON_RUST_CFLAGS)' CXXFLAGS='$(NEON_RUST_CXXFLAGS)' cargo build $(CARGO_BUILD_FLAGS) $(CARGO_PROFILE))
 
 # Force `cargo build` every time. Some of the Rust sources might have
 # changed.

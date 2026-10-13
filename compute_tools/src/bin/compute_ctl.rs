@@ -53,7 +53,7 @@ use compute_tools::params::*;
 use compute_tools::pg_isready::get_pg_isready_bin;
 use compute_tools::spec::*;
 use compute_tools::{hadron_metrics, installed_extensions, logger::*};
-use rlimit::{Resource, setrlimit};
+use rlimit::{Resource, getrlimit, setrlimit};
 use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook::iterator::Signals;
 use tracing::{error, info};
@@ -81,6 +81,10 @@ struct Cli {
     /// the neon extension (for installing remote extensions) and local_proxy.
     #[arg(long, default_value_t = 3081)]
     pub internal_http_port: u16,
+
+    /// IP address for both HTTP services. Use 127.0.0.1 for a local runtime.
+    #[arg(long, default_value = "::")]
+    pub http_listen_addr: std::net::IpAddr,
 
     /// Backwards-compatible --http-port for Hadron deployments. Functionally the
     /// same as --external-http-port.
@@ -231,8 +235,14 @@ fn main() -> Result<()> {
 
     let (tracing_provider, _file_logs_guard) = init(cli.dev, log_dir)?;
 
-    // enable core dumping for all child processes
-    setrlimit(Resource::CORE, rlimit::INFINITY, rlimit::INFINITY)?;
+    // Enable child core dumps only within the limit inherited from the host.
+    // An ordinary local user cannot raise a hard limit (often zero under sudo
+    // or a service manager), and disabled core dumps must not prevent startup.
+    let (soft_core_limit, hard_core_limit) = getrlimit(Resource::CORE)?;
+    if soft_core_limit < hard_core_limit {
+        setrlimit(Resource::CORE, hard_core_limit, hard_core_limit)
+            .context("setting the core-dump soft limit within the inherited hard limit")?;
+    }
 
     if cli.lakebase_mode {
         installed_extensions::initialize_metrics();
@@ -256,6 +266,7 @@ fn main() -> Result<()> {
             pgversion: get_pg_version_string(&cli.pgbin),
             external_http_port,
             internal_http_port,
+            http_listen_addr: cli.http_listen_addr,
             remote_ext_base_url: cli.remote_ext_base_url.clone(),
             resize_swap_on_bind: cli.resize_swap_on_bind,
             set_disk_quota_for_fs: cli.set_disk_quota_for_fs,

@@ -12,6 +12,10 @@
 #include "utils/guc.h"
 #include "utils/hsearch.h"
 
+#ifndef LastWrittenLsnLock
+#define NEON_OWNS_LWLSN_LOCK
+static LWLock *LastWrittenLsnLock;
+#endif
 
 
 typedef struct LastWrittenLsnCacheEntry
@@ -75,9 +79,11 @@ static XLogRecPtr SetLastWrittenLSNForBlockRangeInternal(XLogRecPtr lsn,
 
 
 /* These hold the set_lwlsn_* hooks which were installed before ours, if any */
+#if PG_VERSION_NUM < 170008
 static set_lwlsn_block_range_hook_type prev_set_lwlsn_block_range_hook = NULL;
 static set_lwlsn_block_v_hook_type prev_set_lwlsn_block_v_hook = NULL;
 static set_lwlsn_block_hook_type prev_set_lwlsn_block_hook = NULL;
+#endif
 static set_max_lwlsn_hook_type prev_set_max_lwlsn_hook = NULL;
 static set_lwlsn_relation_hook_type prev_set_lwlsn_relation_hook = NULL;
 static set_lwlsn_db_hook_type prev_set_lwlsn_db_hook = NULL;
@@ -92,12 +98,14 @@ init_lwlsncache(void)
 	
 	lwlc_register_gucs();
 
+#if PG_VERSION_NUM < 170008
 	prev_set_lwlsn_block_range_hook = set_lwlsn_block_range_hook;
 	set_lwlsn_block_range_hook = neon_set_lwlsn_block_range;
 	prev_set_lwlsn_block_v_hook = set_lwlsn_block_v_hook;
 	set_lwlsn_block_v_hook = neon_set_lwlsn_block_v;
 	prev_set_lwlsn_block_hook = set_lwlsn_block_hook;
 	set_lwlsn_block_hook = neon_set_lwlsn_block;
+#endif
 	prev_set_max_lwlsn_hook = set_max_lwlsn_hook;
 	set_max_lwlsn_hook = neon_set_max_lwlsn;
 	prev_set_lwlsn_relation_hook = set_lwlsn_relation_hook;
@@ -115,6 +123,9 @@ LwLsnCacheShmemRequest(void)
 	requested_size += hash_estimate_size(lwlsn_cache_size, sizeof(LastWrittenLsnCacheEntry));
 
 	RequestAddinShmemSpace(requested_size);
+#ifdef NEON_OWNS_LWLSN_LOCK
+	RequestNamedLWLockTranche("neon_last_written_lsn", 1);
+#endif
 }
 
 void
@@ -122,6 +133,9 @@ LwLsnCacheShmemInit(void)
 {
 	static HASHCTL info;
 	bool found;
+#ifdef NEON_OWNS_LWLSN_LOCK
+	LastWrittenLsnLock = &GetNamedLWLockTranche("neon_last_written_lsn")[0].lock;
+#endif
 	if (lwlsn_cache_size > 0)
 	{
 		info.keysize = sizeof(BufferTag);
@@ -490,4 +504,3 @@ neon_set_lwlsn_db(XLogRecPtr lsn)
 	NRelFileInfo dummyNode = {InvalidOid, InvalidOid, InvalidOid};
 	return neon_set_lwlsn_block(lsn, dummyNode, MAIN_FORKNUM, 0);
 }
-

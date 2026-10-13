@@ -43,6 +43,7 @@
 
 #include "access/parallel.h"
 #include "access/xact.h"
+#include "access/slru.h"
 #include "access/xlog.h"
 #include "access/xlogdefs.h"
 #include "access/xloginsert.h"
@@ -57,6 +58,7 @@
 #include "storage/bufmgr.h"
 #include "storage/buf_internals.h"
 #include "storage/fsm_internals.h"
+#include "storage/fd.h"
 #include "storage/md.h"
 #include "storage/smgr.h"
 
@@ -2128,7 +2130,7 @@ neon_end_unlogged_build(SMgrRelation reln)
 #define STRPREFIX(str, prefix) (strncmp(str, prefix, strlen(prefix)) == 0)
 
 static int
-neon_read_slru_segment(SMgrRelation reln, const char* path, int segno, void* buffer)
+neon_fetch_slru_segment(const char* path, int segno, void* buffer)
 {
 	XLogRecPtr	request_lsn,
 				not_modified_since;
@@ -2181,6 +2183,66 @@ neon_read_slru_segment(SMgrRelation reln, const char* path, int segno, void* buf
 
 	return n_blocks;
 }
+
+#if PG_VERSION_NUM >= 170008
+/*
+ * The maintained PG17 patch series moves SLRU materialization out of core.
+ * Publish a complete cache file without replacing a segment another backend
+ * has already downloaded (and may since have modified).
+ */
+static bool
+neon_download_slru_segment(const char *path, int segno)
+{
+	char *buffer = palloc(BLCKSZ * SLRU_PAGES_PER_SEGMENT);
+	int n_blocks = neon_fetch_slru_segment(path, segno, buffer);
+	char temporary[MAXPGPATH];
+	int fd;
+	int saved_errno;
+
+	if (n_blocks <= 0)
+	{
+		pfree(buffer);
+		return false;
+	}
+
+	snprintf(temporary, sizeof(temporary), "%s.download.%d", path, MyProcPid);
+	fd = OpenTransientFile(temporary, O_WRONLY | O_CREAT | O_TRUNC | PG_BINARY);
+	if (fd < 0)
+		ereport(ERROR, (errcode_for_file_access(), errmsg("could not create file \"%s\": %m", temporary)));
+	errno = 0;
+	if (pg_pwrite(fd, buffer, n_blocks * BLCKSZ, 0) != n_blocks * BLCKSZ)
+	{
+		saved_errno = errno ? errno : ENOSPC;
+		CloseTransientFile(fd);
+		unlink(temporary);
+		errno = saved_errno;
+		ereport(ERROR, (errcode_for_file_access(), errmsg("could not write file \"%s\": %m", temporary)));
+	}
+	pfree(buffer);
+	if (CloseTransientFile(fd) != 0)
+	{
+		saved_errno = errno;
+		unlink(temporary);
+		errno = saved_errno;
+		ereport(ERROR, (errcode_for_file_access(), errmsg("could not close file \"%s\": %m", temporary)));
+	}
+	if (link(temporary, path) != 0 && errno != EEXIST)
+	{
+		saved_errno = errno;
+		unlink(temporary);
+		errno = saved_errno;
+		ereport(ERROR, (errcode_for_file_access(), errmsg("could not publish SLRU file \"%s\": %m", path)));
+	}
+	unlink(temporary);
+	return true;
+}
+#else
+static int
+neon_read_slru_segment(SMgrRelation reln, const char *path, int segno, void *buffer)
+{
+	return neon_fetch_slru_segment(path, segno, buffer);
+}
+#endif
 
 static void
 AtEOXact_neon(XactEvent event, void *arg)
@@ -2251,7 +2313,9 @@ static const struct f_smgr neon_smgr =
 	.smgr_finish_unlogged_build_phase_1 = neon_finish_unlogged_build_phase_1,
 	.smgr_end_unlogged_build = neon_end_unlogged_build,
 
+#if PG_VERSION_NUM < 170008
 	.smgr_read_slru_segment = neon_read_slru_segment,
+#endif
 };
 
 const f_smgr *
@@ -2271,6 +2335,9 @@ smgr_init_neon(void)
 	RegisterXactCallback(AtEOXact_neon, NULL);
 
 	smgr_init_standard();
+#if PG_VERSION_NUM >= 170008
+	read_slru_segment_hook = neon_download_slru_segment;
+#endif
 	neon_init();
 	communicator_init();
 }
