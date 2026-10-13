@@ -131,3 +131,22 @@ branch enable/disable contract; shipping files alone does not enable an extensio
 or imply analytical support for its types. pg_stat_statements must be preloaded
 on normal computes before CREATE EXTENSION; private export computes retain their
 minimal preload list.
+
+## Fork CI scope
+
+`supabricks/neon` develops on `sb/main`. Its supported gate is `native-engine`:
+both Linux x86_64 and macOS arm64 build, PostgreSQL regressions, archive inventory,
+relocation, extension lifecycle and restart checks remain required qualification.
+Workflow lint and PostgreSQL settings regeneration also run on the fork.
+
+The inherited upstream Build and Test, extra platform builds, E2E trigger, PG
+client and pre-merge workflows target upstream `main`/`release*` branches only.
+They require Neon self-hosted runners, private cloud workflows, upstream release
+tags and credentials which this fork does not have. Organization-membership
+labeling runs only in `neondatabase/neon`. These are not native qualification
+results and must not be presented as passing upstream cloud E2E coverage.
+Private upstream workflow-dispatch entry points remain upstream tooling.
+
+Changing fork CI scope does not promote or alter an engine archive. The PG253
+engine payload remains the independently qualified eecdc60e archive until a new
+source/archive pair is qualified and explicitly pinned by the platform.

@@ -5,6 +5,8 @@ on:
     branches:
       - main
   pull_request:
+    # Upstream hosted/private infrastructure; sb/main uses native-engine.
+    branches: [main, release, release-proxy, release-compute]
 
 defaults:
   run:

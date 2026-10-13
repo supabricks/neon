@@ -2,6 +2,8 @@ name: Pre-merge checks
 
 on:
   pull_request:
+    # Upstream hosted/private infrastructure; sb/main uses native-engine.
+    branches: [main, release, release-proxy, release-compute]
     paths:
       - .github/workflows/_check-codestyle-python.yml
       - .github/workflows/_check-codestyle-rust.yml

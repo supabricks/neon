@@ -2,6 +2,8 @@ name: Trigger E2E Tests
 
 on:
   pull_request:
+    # Upstream hosted/private infrastructure; sb/main uses native-engine.
+    branches: [main, release, release-proxy, release-compute]
     types:
       - ready_for_review
   workflow_call:
